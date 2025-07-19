@@ -6,6 +6,8 @@ import re
 import os
 import base64
 from urllib.parse import unquote
+import smtplib
+from email.message import EmailMessage
 import segment_selector  # 🔁 make sure this file has `handle_segment_selection()` defined
 
 # ----------------- SEGMENT CLICK HANDLER ----------------- #
@@ -36,7 +38,10 @@ CONFIG = {
         "Commercial Real Estate Loans",
         "Unsecured Business Credit",
         "Meet Our Founder"
-    ]
+    ],
+    "sender_email": "dcgcapital3@gmail.com",
+    "app_password": "fykn tdfm qafy rqks",  # Replace with secure app password
+    "base_url": "https://dcg-email-app.onrender.com"  # Replace with your actual Render URL
 }
 
 # ----------------- AUTH ----------------- #
@@ -62,6 +67,58 @@ def get_gsheets_client() -> gspread.Client:
     except Exception as e:
         st.error(f"Failed to connect to Google Sheets: {str(e)}")
         return None
+
+# ----------------- EMAIL ----------------- #
+def send_email(subject, body, recipient_email):
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = CONFIG["sender_email"]
+    msg["To"] = recipient_email
+    msg.set_content(body)
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(CONFIG["sender_email"], CONFIG["app_password"])
+            smtp.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"❌ Failed to send email to {recipient_email}: {e}")
+        return False
+
+def build_welcome_email(name, email):
+    segments = {
+        "Cash Flow Solutions": "💸",
+        "Customer Financing Tools": "🧾",
+        "Equipment & Franchise Funding": "🛠️",
+        "Healthcare & Practice Loans": "🩺",
+        "SBA & Business Expansion Loans": "🚀",
+        "Commercial Real Estate Loans": "🏢",
+        "Unsecured Business Credit": "💳",
+        "Meet Our Founder": "👨‍⚕️"
+    }
+
+    links = "\n".join([
+        f"{icon} {title}: {CONFIG['base_url']}/select?email={email}&segment={title.replace(' ', '+')}"
+        for title, icon in segments.items()
+    ])
+
+    subject = "Welcome to Doriscar Capital Group"
+    body = f"""Hi {name},
+
+Thanks for connecting with Doriscar Capital Group!
+
+We help entrepreneurs and business owners access the capital they need to grow — from working capital and equipment financing to SBA loans and real estate funding.
+
+Let us know what you're most interested in. Just click one:
+
+{links}
+
+Once you click, we’ll personalize everything we send you moving forward.
+
+Cheers,  
+Doriscar Capital Group
+"""
+    return subject, body
 
 # ----------------- VALIDATION ----------------- #
 def is_valid_email(email: str) -> bool:
@@ -100,7 +157,6 @@ def main():
                 sheet = spreadsheet.worksheet(CONFIG["worksheet_name"])
 
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
                 sheet.append_row([
                     name.strip(),
                     email.strip().lower(),
@@ -109,6 +165,10 @@ def main():
                     timestamp,
                     ""       # Notes
                 ])
+
+                # Send welcome email
+                subject, body = build_welcome_email(name.strip(), email.strip().lower())
+                send_email(subject, body, email.strip().lower())
 
                 st.session_state.submitted = True
 
