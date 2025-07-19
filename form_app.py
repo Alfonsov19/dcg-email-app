@@ -4,20 +4,18 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import re
 import os
+import base64
 from urllib.parse import unquote
 import segment_selector  # 🔁 make sure this file has `handle_segment_selection()` defined
 
 # ----------------- SEGMENT CLICK HANDLER ----------------- #
-query_params = st.experimental_get_query_params()
+query_params = st.query_params
 email_param = query_params.get("email", [None])[0]
 segment_param = query_params.get("segment", [None])[0]
 
 if email_param and segment_param:
-    # Optional: clean/normalize params
     email_param = unquote(email_param).strip().lower()
     segment_param = unquote(segment_param).strip()
-
-    # Run the tagging + follow-up logic from segment_selector.py
     segment_selector.handle_segment_selection(email_param, segment_param)
 
     st.set_page_config(page_title="You're In!", page_icon="✅")
@@ -42,6 +40,15 @@ CONFIG = {
 }
 
 # ----------------- AUTH ----------------- #
+def write_credentials_from_env():
+    encoded = os.getenv("GOOGLE_CREDENTIALS_BASE64")
+    if not encoded:
+        raise RuntimeError("GOOGLE_CREDENTIALS_BASE64 environment variable not found.")        
+    creds_path = os.path.abspath("credentials.json")
+    with open(creds_path, "wb") as f:
+        f.write(base64.b64decode(encoded))
+    return creds_path
+
 @st.cache_resource
 def get_gsheets_client() -> gspread.Client:
     try:
@@ -49,10 +56,7 @@ def get_gsheets_client() -> gspread.Client:
             "https://spreadsheets.google.com/feeds",
             "https://www.googleapis.com/auth/drive"
         ]
-        creds_path = os.path.abspath("credentials.json")
-        if not os.path.exists(creds_path):
-            raise FileNotFoundError(f"credentials.json not found at {creds_path}")
-
+        creds_path = write_credentials_from_env()
         creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
         return gspread.authorize(creds)
     except Exception as e:
@@ -72,7 +76,6 @@ def main():
     if 'submitted' not in st.session_state:
         st.session_state.submitted = False
 
-    # ✅ Show success message if already submitted
     if st.session_state.submitted:
         st.success("✅ Thanks! You're now on the list.")
 
@@ -107,7 +110,6 @@ def main():
                     ""       # Notes
                 ])
 
-                # ✅ Keep success message after rerender
                 st.session_state.submitted = True
 
             except Exception as e:
