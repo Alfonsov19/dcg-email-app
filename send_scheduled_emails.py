@@ -52,7 +52,7 @@ We noticed you haven't scheduled your free strategy call yet.
 
 We're here to help you move forward with funding that fits your vision.
 
-📅 Book your call now: https://calendly.com/YOUR-LINK
+📅 Book your call now: https://calendly.com/dcgcapital3/30min
 
 Looking forward to helping you grow,
 Doriscar Capital Group

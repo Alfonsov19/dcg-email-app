@@ -4,16 +4,40 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import re
 import os
+from urllib.parse import unquote
+import segment_selector  # 🔁 make sure this file has `handle_segment_selection()` defined
+
+# ----------------- SEGMENT CLICK HANDLER ----------------- #
+query_params = st.experimental_get_query_params()
+email_param = query_params.get("email", [None])[0]
+segment_param = query_params.get("segment", [None])[0]
+
+if email_param and segment_param:
+    # Optional: clean/normalize params
+    email_param = unquote(email_param).strip().lower()
+    segment_param = unquote(segment_param).strip()
+
+    # Run the tagging + follow-up logic from segment_selector.py
+    segment_selector.handle_segment_selection(email_param, segment_param)
+
+    st.set_page_config(page_title="You're In!", page_icon="✅")
+    st.title("✅ You're All Set!")
+    st.success(f"You've been added to the **{segment_param}** segment. Keep an eye on your inbox for upcoming emails.")
+    st.stop()
 
 # ----------------- CONFIG ----------------- #
 CONFIG = {
     "sheet_name": "dcg_contacts",
     "worksheet_name": "Sheet1",
     "segments": [
-        "Business Financing",
-        "Credit Building",
-        "Financial Education",
-        "Referral & Partnership Opportunities"
+        "Cash Flow Solutions",
+        "Customer Financing Tools",
+        "Equipment & Franchise Funding",
+        "Healthcare & Practice Loans",
+        "SBA & Business Expansion Loans",
+        "Commercial Real Estate Loans",
+        "Unsecured Business Credit",
+        "Meet Our Founder"
     ]
 }
 

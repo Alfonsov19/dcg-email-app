@@ -23,7 +23,7 @@ CONFIG = {
     ],
     "sender_email": "dcgcapital3@gmail.com",  # ✅ Your Gmail
     "app_password": "fykn tdfm qafy rqks",     # ✅ Your Gmail App Password
-    "base_url": "http://localhost:8501/select"  # 🔁 Replace with your deployed URL when ready
+    "base_url": "https://dcg-email-app.onrender.com"  # 🔁 Replace with your deployed URL when ready
 }
 
 # -------------------- AUTH -------------------- #
