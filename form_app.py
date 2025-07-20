@@ -8,22 +8,7 @@ import base64
 from urllib.parse import unquote
 import smtplib
 from email.message import EmailMessage
-import segment_selector  # 🔁 make sure this file has `handle_segment_selection()` defined
-
-# ----------------- SEGMENT CLICK HANDLER ----------------- #
-query_params = st.query_params
-email_param = query_params.get("email", [None])[0]
-segment_param = query_params.get("segment", [None])[0]
-
-if email_param and segment_param:
-    email_param = unquote(email_param).strip().lower()
-    segment_param = unquote(segment_param).strip()
-    segment_selector.handle_segment_selection(email_param, segment_param)
-
-    st.set_page_config(page_title="You're In!", page_icon="✅")
-    st.title("✅ You're All Set!")
-    st.success(f"You've been added to the **{segment_param}** segment. Keep an eye on your inbox for upcoming emails.")
-    st.stop()
+import segment_selector  # 🔁 Make sure this exists and has `handle_segment_selection()` defined
 
 # ----------------- CONFIG ----------------- #
 CONFIG = {
@@ -40,15 +25,38 @@ CONFIG = {
         "Meet Our Founder"
     ],
     "sender_email": "dcgcapital3@gmail.com",
-    "app_password": "fykn tdfm qafy rqks",  # Replace with secure app password
-    "base_url": "https://dcg-email-app.onrender.com"  # Replace with your actual Render URL
+    "app_password": "fykn tdfm qafy rqks",  # Secure Gmail app password
+    "base_url": "https://dcg-email-app.onrender.com"  # Your deployed app base URL
 }
+
+# ----------------- HANDLE QUERY PARAMS ----------------- #
+query_params = st.query_params
+email_param = query_params.get("email", [None])[0]
+segment_param = query_params.get("segment", [None])[0]
+
+if email_param and segment_param:
+    st.set_page_config(page_title="Confirm Your Interest", page_icon="📩")
+    email_param = unquote(email_param).strip().lower()
+    segment_param = unquote(segment_param).strip()
+
+    st.title("📬 Confirm Your Interest")
+    st.write(f"You selected: **{segment_param}**")
+    st.write("Is that correct?")
+
+    if st.button("✅ Yes, confirm my choice"):
+        try:
+            segment_selector.handle_segment_selection(email_param, segment_param)
+            st.success(f"You're now subscribed to **{segment_param}** updates!")
+        except Exception as e:
+            st.error(f"❌ Something went wrong: {e}")
+
+    st.stop()
 
 # ----------------- AUTH ----------------- #
 def write_credentials_from_env():
     encoded = os.getenv("GOOGLE_CREDENTIALS_BASE64")
     if not encoded:
-        raise RuntimeError("GOOGLE_CREDENTIALS_BASE64 environment variable not found.")        
+        raise RuntimeError("GOOGLE_CREDENTIALS_BASE64 environment variable not found.")
     creds_path = os.path.abspath("credentials.json")
     with open(creds_path, "wb") as f:
         f.write(base64.b64decode(encoded))
@@ -68,7 +76,7 @@ def get_gsheets_client() -> gspread.Client:
         st.error(f"Failed to connect to Google Sheets: {str(e)}")
         return None
 
-# ----------------- EMAIL ----------------- #
+# ----------------- EMAIL UTILS ----------------- #
 def send_email(subject, body, recipient_email):
     msg = EmailMessage()
     msg["Subject"] = subject
@@ -98,7 +106,7 @@ def build_welcome_email(name, email):
     }
 
     links = "\n".join([
-        f"{icon} {title}: {CONFIG['base_url']}/select?email={email}&segment={title.replace(' ', '+')}"
+        f"{icon} {title}: {CONFIG['base_url']}?email={email}&segment={title.replace(' ', '%20')}"
         for title, icon in segments.items()
     ])
 
@@ -125,10 +133,10 @@ def is_valid_email(email: str) -> bool:
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(pattern, email))
 
-# ----------------- MAIN APP ----------------- #
+# ----------------- MAIN FORM UI ----------------- #
 def main():
     st.set_page_config(page_title="Interest Form", page_icon="📋")
-    st.title("Tell Us What You're Interested In")
+    st.title("📋 Tell Us What You're Interested In")
 
     if 'submitted' not in st.session_state:
         st.session_state.submitted = False

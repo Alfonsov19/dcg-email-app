@@ -8,7 +8,7 @@ import os
 
 # -------------------- CONFIG -------------------- #
 SENDER_EMAIL = "dcgcapital3@gmail.com"
-APP_PASSWORD = "fykn tdfm qafy rqks"  # Replace with your Gmail app password
+APP_PASSWORD = "fykn tdfm qafy rqks"  # Gmail app password
 EMAIL_SEQUENCE_FOLDER = "email_sequences"  # Folder containing the .json files
 
 # -------------------- LOAD SHEET -------------------- #
@@ -38,7 +38,10 @@ def send_email(subject, body, recipient_email):
 
 # -------------------- LOAD EMAIL SEQUENCE -------------------- #
 def load_email_sequence(segment_name):
-    filename = os.path.join(EMAIL_SEQUENCE_FOLDER, f"{segment_name.lower().replace(' ', '_')}.json")
+    filename = os.path.join(
+        EMAIL_SEQUENCE_FOLDER,
+        f"{segment_name.strip().lower().replace(' ', '_')}.json"
+    )
     if not os.path.exists(filename):
         print(f"⚠️ No sequence found for: {segment_name}")
         return []
@@ -60,7 +63,7 @@ Doriscar Capital Group
 
 # -------------------- MAIN LOOP -------------------- #
 for idx, row in enumerate(rows):
-    next_step_date = row.get("Next_Step_Date", "")
+    next_step_date = row.get("Next_Step_Date", "").strip()
     segment = row.get("Segment", "").strip()
     email = row.get("Email", "").strip()
     name = row.get("Name", "").strip()
@@ -70,36 +73,47 @@ for idx, row in enumerate(rows):
         continue
     if next_step_date != today:
         continue
+    if last_email == "CTA Loop":
+        continue
 
     sequence = load_email_sequence(segment)
     if not sequence:
         continue
 
     # Determine next email index
-    if not last_email or last_email == "":
+    if not last_email:
         email_index = 0
     elif "Week" in last_email:
-        email_index = int(last_email.replace("Week ", ""))
+        try:
+            email_index = int(last_email.replace("Week ", ""))
+        except ValueError:
+            email_index = 0
     else:
         email_index = 0
 
     if email_index < len(sequence):
         email_data = sequence[email_index]
         subject = email_data["subject"]
-        body = email_data["body"].replace("{name}", name)
+        body = email_data["body"].replace("{name}", name if name else "there")
         sent = send_email(subject, body, email)
 
         if sent:
             sheet.update_cell(idx + 2, 4, f"Week {email_index + 1}")  # Last_Email_Sent
             next_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
             sheet.update_cell(idx + 2, 5, next_date)  # Next_Step_Date
+
+            # Optional log
+            with open("email_log.txt", "a", encoding="utf-8") as log:
+                log.write(f"[{datetime.now()}] Sent '{subject}' to {email} (Week {email_index + 1})\n")
     else:
-        # Sequence complete – repeat CTA loop
+        # Sequence complete – begin CTA loop
         subject = "👋 Still Thinking It Over? Let's Talk"
-        body = CTA_MESSAGE.replace("{name}", name)
+        body = CTA_MESSAGE.replace("{name}", name if name else "there")
         sent = send_email(subject, body, email)
 
         if sent:
             sheet.update_cell(idx + 2, 4, "CTA Loop")
             next_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
             sheet.update_cell(idx + 2, 5, next_date)
+            with open("email_log.txt", "a", encoding="utf-8") as log:
+                log.write(f"[{datetime.now()}] Sent CTA Loop email to {email}\n")

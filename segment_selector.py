@@ -2,30 +2,32 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime, timedelta
 import os
+import base64
+from send_scheduled_emails import send_email, load_email_sequence
 
-# -------------------- CONFIG -------------------- #
 CONFIG = {
     "sheet_name": "dcg_contacts",
     "worksheet_name": "Sheet1"
 }
 
-# -------------------- AUTH -------------------- #
+# -------------------- GOOGLE SHEETS AUTH -------------------- #
 def get_gsheets_client():
     try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        encoded = os.getenv("GOOGLE_CREDENTIALS_BASE64")
+        if not encoded:
+            raise RuntimeError("Missing GOOGLE_CREDENTIALS_BASE64 in environment.")
         creds_path = os.path.abspath("credentials.json")
+        with open(creds_path, "wb") as f:
+            f.write(base64.b64decode(encoded))
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
         creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
         return gspread.authorize(creds)
     except Exception as e:
         print(f"❌ Failed to connect to Google Sheets: {e}")
         return None
 
-# -------------------- HANDLER FUNCTION -------------------- #
+# -------------------- MAIN FUNCTION -------------------- #
 def handle_segment_selection(email: str, segment: str):
-    """
-    Tags the given email with the selected segment in Google Sheets,
-    clears the last email sent, and schedules the next email.
-    """
     client = get_gsheets_client()
     if not client:
         print("❌ Google Sheets client not available.")
@@ -36,15 +38,29 @@ def handle_segment_selection(email: str, segment: str):
         data = sheet.get_all_records()
         email = email.strip().lower()
 
-        for idx, row in enumerate(data):
+        for idx, row in enumerate(data, start=2):  # row index starts at 2 (1-based with headers)
             if row.get("Email", "").strip().lower() == email:
-                sheet.update_cell(idx + 2, 3, segment)  # Segment
-                sheet.update_cell(idx + 2, 4, "")        # Last_Email_Sent
-                sheet.update_cell(idx + 2, 5, (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"))  # Next_Step_Date
-                print(f"✅ Updated segment for {email} to '{segment}'")
+                # Update values
+                today = datetime.now().strftime("%Y-%m-%d")
+                next_week = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+                sheet.update_cell(idx, 3, segment)        # Segment
+                sheet.update_cell(idx, 4, "Week 1")       # Last_Email_Sent
+                sheet.update_cell(idx, 5, next_week)      # Next_Step_Date
+
+                # Send first email (Week 1)
+                sequence = load_email_sequence(segment)
+                if sequence:
+                    first_email = sequence[0]
+                    subject = first_email["subject"]
+                    body = first_email["body"].replace("{name}", row["Name"])
+                    send_email(subject, body, email)
+                    print(f"✅ Sent Week 1 email to {email}")
+                else:
+                    print(f"⚠️ No email sequence found for segment '{segment}'")
+
                 return
 
         print(f"⚠️ No matching email found for {email}")
 
     except Exception as e:
-        print(f"❌ Failed to update Google Sheets: {e}")
+        print(f"❌ Failed to update Google Sheets or send email: {e}")
