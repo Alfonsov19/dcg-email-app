@@ -8,7 +8,6 @@ import base64
 from urllib.parse import unquote
 import smtplib
 from email.message import EmailMessage
-import segment_selector  # 🔁 Make sure this exists and has `handle_segment_selection()` defined
 
 # ----------------- CONFIG ----------------- #
 CONFIG = {
@@ -25,34 +24,11 @@ CONFIG = {
         "Meet Our Founder"
     ],
     "sender_email": "dcgcapital3@gmail.com",
-    "app_password": "fykn tdfm qafy rqks",  # Secure Gmail app password
-    "base_url": "https://dcg-email-app.onrender.com"  # Your deployed app base URL
+    "app_password": "fykn tdfm qafy rqks",
+    "base_url": "https://dcg-email-app.onrender.com"
 }
 
-# ----------------- HANDLE QUERY PARAMS ----------------- #
-query_params = st.query_params
-email_param = query_params.get("email", [None])[0]
-segment_param = query_params.get("segment", [None])[0]
-
-if email_param and segment_param:
-    st.set_page_config(page_title="Confirm Your Interest", page_icon="📩")
-    email_param = unquote(email_param).strip().lower()
-    segment_param = unquote(segment_param).strip()
-
-    st.title("📬 Confirm Your Interest")
-    st.write(f"You selected: **{segment_param}**")
-    st.write("Is that correct?")
-
-    if st.button("✅ Yes, confirm my choice"):
-        try:
-            segment_selector.handle_segment_selection(email_param, segment_param)
-            st.success(f"You're now subscribed to **{segment_param}** updates!")
-        except Exception as e:
-            st.error(f"❌ Something went wrong: {e}")
-
-    st.stop()
-
-# ----------------- AUTH ----------------- #
+# ----------------- CREDENTIALS ----------------- #
 def write_credentials_from_env():
     encoded = os.getenv("GOOGLE_CREDENTIALS_BASE64")
     if not encoded:
@@ -128,12 +104,36 @@ Doriscar Capital Group
 """
     return subject, body
 
-# ----------------- VALIDATION ----------------- #
+# ----------------- EMAIL VALIDATION ----------------- #
 def is_valid_email(email: str) -> bool:
     pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
     return bool(re.match(pattern, email))
 
-# ----------------- MAIN FORM UI ----------------- #
+# ----------------- URL PARAM HANDLER ----------------- #
+query_params = st.query_params
+email_param = query_params.get("email", [None])[0]
+segment_param = query_params.get("segment", [None])[0]
+
+if email_param:
+    st.set_page_config(page_title="Select Your Segment", page_icon="🧭")
+    st.title("🧭 Tell Us What You're Interested In")
+
+    email_param = unquote(email_param).strip().lower()
+    segment_param = unquote(segment_param).strip() if segment_param else CONFIG["segments"][0]
+
+    selected = st.radio("Please select a segment:", CONFIG["segments"],
+                        index=CONFIG["segments"].index(segment_param) if segment_param in CONFIG["segments"] else 0)
+
+    if st.button("✅ Confirm Selection"):
+        import segment_selector  # Make sure this file exists
+        try:
+            segment_selector.handle_segment_selection(email_param, selected)
+            st.success(f"You’ve been subscribed to **{selected}**! 🎉 Watch your inbox.")
+        except Exception as e:
+            st.error(f"Something went wrong: {e}")
+    st.stop()
+
+# ----------------- MAIN FORM (if no query params) ----------------- #
 def main():
     st.set_page_config(page_title="Interest Form", page_icon="📋")
     st.title("📋 Tell Us What You're Interested In")
