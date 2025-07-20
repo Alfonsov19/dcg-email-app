@@ -10,11 +10,12 @@ from urllib.parse import unquote
 def write_credentials_from_env():
     encoded = os.getenv("GOOGLE_CREDENTIALS_BASE64")
     if not encoded:
-        raise RuntimeError("GOOGLE_CREDENTIALS_BASE64 is not set.")
+        raise RuntimeError("GOOGLE_CREDENTIALS_BASE64 not found.")
     creds_path = os.path.abspath("credentials.json")
     with open(creds_path, "wb") as f:
         f.write(base64.b64decode(encoded))
     return creds_path
+
 
 def get_gsheet_client():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -33,22 +34,25 @@ def update_segment(email, segment):
     client = get_gsheet_client()
     sheet = client.open(SHEET_NAME).worksheet(WORKSHEET_NAME)
     all_rows = sheet.get_all_records()
-    
+
     for idx, row in enumerate(all_rows):
         if row.get("Email", "").strip().lower() == email.lower():
-            sheet.update_cell(idx + 2, 3, segment)  # Column C = Segment
+            sheet.update_cell(idx + 2, 3, segment)  # C = Segment
             return True
     return False
 
 
-# ----------------- UI LOGIC ----------------- #
+# ----------------- UI ----------------- #
 st.set_page_config(page_title="Tell Us What You're Interested In", layout="centered")
 st.title("🧭 Tell Us What You're Interested In")
 st.markdown("Please select your preferred segment below:")
 
-# Grab email from query param
-query_params = st.experimental_get_query_params()
-email = unquote(query_params.get("email", [""])[0])
+# ✅ Corrected query param usage
+query_params = st.query_params
+email = unquote(query_params.get("email", ""))
+
+# Temporary debug
+# st.write("Email:", email)
 
 segments = [
     "Cash Flow Solutions",
@@ -62,6 +66,7 @@ segments = [
 ]
 
 selected_segment = st.radio("Segments", segments)
+
 if st.button("✅ Confirm Selection"):
     if email:
         success = update_segment(email, selected_segment)
@@ -70,4 +75,4 @@ if st.button("✅ Confirm Selection"):
         else:
             st.error("⚠️ Email not found in database.")
     else:
-        st.warning("⚠️ No email detected from the URL.")
+        st.warning("⚠️ No email detected in URL.")
