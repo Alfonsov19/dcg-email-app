@@ -5,17 +5,31 @@ import json
 import smtplib
 from email.message import EmailMessage
 import os
+import base64
 
 # -------------------- CONFIG -------------------- #
 SENDER_EMAIL = "dcgcapital3@gmail.com"
 APP_PASSWORD = "fykn tdfm qafy rqks"  # Gmail app password
-EMAIL_SEQUENCE_FOLDER = "email_sequences"  # Folder containing the .json files
+EMAIL_SEQUENCE_FOLDER = "email_sequences"
+SHEET_NAME = "dcg_contacts"
+WORKSHEET_NAME = "Sheet1"
+
+# -------------------- CREDENTIALS FROM ENV -------------------- #
+def write_credentials_from_env():
+    encoded = os.getenv("GOOGLE_CREDENTIALS_BASE64")
+    if not encoded:
+        raise RuntimeError("GOOGLE_CREDENTIALS_BASE64 environment variable not found.")
+    creds_path = os.path.abspath("credentials.json")
+    with open(creds_path, "wb") as f:
+        f.write(base64.b64decode(encoded))
+    return creds_path
 
 # -------------------- LOAD SHEET -------------------- #
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+creds_path = write_credentials_from_env()
+creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
 client = gspread.authorize(creds)
-sheet = client.open("dcg_contacts").worksheet("Sheet1")
+sheet = client.open(SHEET_NAME).worksheet(WORKSHEET_NAME)
 rows = sheet.get_all_records()
 today = datetime.now().strftime("%Y-%m-%d")
 
@@ -57,7 +71,7 @@ We're here to help you move forward with funding that fits your vision.
 
 📅 Book your call now: https://calendly.com/dcgcapital3/30min
 
-Looking forward to helping you grow,
+Looking forward to helping you grow,  
 Doriscar Capital Group
 """
 
@@ -102,7 +116,6 @@ for idx, row in enumerate(rows):
             next_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
             sheet.update_cell(idx + 2, 5, next_date)  # Next_Step_Date
 
-            # Optional log
             with open("email_log.txt", "a", encoding="utf-8") as log:
                 log.write(f"[{datetime.now()}] Sent '{subject}' to {email} (Week {email_index + 1})\n")
     else:
