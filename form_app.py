@@ -2,6 +2,7 @@ import streamlit as st
 import gspread
 import os
 import base64
+from datetime import datetime
 from urllib.parse import unquote
 from oauth2client.service_account import ServiceAccountCredentials
 
@@ -22,15 +23,26 @@ def get_gsheet_client():
 
 # ---------------- Update Sheet Function ---------------- #
 def update_segment(email, segment):
+    if not segment:
+        return False
+
     client = get_gsheet_client()
     sheet = client.open("dcg_contacts").worksheet("Sheet1")
     data = sheet.get_all_records()
 
+    updated = False
     for i, row in enumerate(data):
-        if row.get("Email", "").strip().lower() == email.strip().lower():
-            sheet.update_cell(i + 2, 3, segment)  # Row offset +2, Column C = 3
-            return True
-    return False
+        if (
+            row.get("Email", "").strip().lower() == email.strip().lower()
+            and row.get("Segment", "").strip() == "Pending Segment Selection"
+        ):
+            # Update Segment column (C)
+            sheet.update_cell(i + 2, 3, segment)
+            # Update Timestamp column (F)
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            sheet.update_cell(i + 2, 6, timestamp)
+            updated = True
+    return updated
 
 # ---------------- Streamlit UI ---------------- #
 st.set_page_config(page_title="Tell Us What You're Interested In", layout="centered")
@@ -62,4 +74,4 @@ if st.button("✅ Confirm Selection"):
     if success:
         st.success(f"🎉 You're now subscribed to **{selected_segment}** updates. Watch your inbox!")
     else:
-        st.error("⚠️ Could not find your email in the sheet to update.")
+        st.error("⚠️ No matching email with 'Pending Segment Selection' found in the sheet.")
