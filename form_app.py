@@ -1,60 +1,73 @@
 import streamlit as st
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
 import os
 import base64
+from oauth2client.service_account import ServiceAccountCredentials
 from urllib.parse import unquote
-import segment_selector
 
-# ----------------- CONFIG ----------------- #
-CONFIG = {
-    "segments": [
-        "Cash Flow Solutions",
-        "Customer Financing Tools",
-        "Equipment & Franchise Funding",
-        "Healthcare & Practice Loans",
-        "SBA & Business Expansion Loans",
-        "Commercial Real Estate Loans",
-        "Unsecured Business Credit",
-        "Meet Our Founder"
-    ]
-}
 
-# ----------------- ENV-BASED CREDENTIALS ----------------- #
+# ----------------- AUTH SETUP ----------------- #
 def write_credentials_from_env():
     encoded = os.getenv("GOOGLE_CREDENTIALS_BASE64")
     if not encoded:
-        raise RuntimeError("GOOGLE_CREDENTIALS_BASE64 environment variable not found.")
+        raise RuntimeError("GOOGLE_CREDENTIALS_BASE64 is not set.")
     creds_path = os.path.abspath("credentials.json")
     with open(creds_path, "wb") as f:
         f.write(base64.b64decode(encoded))
     return creds_path
 
-# ----------------- IF EMAIL + SEGMENT PRESENT ----------------- #
-query_params = st.query_params
-email_param = query_params.get("email", [None])[0]
-segment_param = query_params.get("segment", [None])[0]
+def get_gsheet_client():
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds_path = write_credentials_from_env()
+    creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
+    return gspread.authorize(creds)
 
-if email_param:
-    st.set_page_config(page_title="Select Your Segment", page_icon="🧭")
-    st.title("🧭 Tell Us What You're Interested In")
 
-    email_param = unquote(email_param).strip().lower()
-    segment_param = unquote(segment_param).strip() if segment_param else CONFIG["segments"][0]
+# ----------------- SHEET CONFIG ----------------- #
+SHEET_NAME = "dcg_contacts"
+WORKSHEET_NAME = "Sheet1"
 
-    selected = st.radio("Please select your preferred segment below:", CONFIG["segments"],
-                        index=CONFIG["segments"].index(segment_param) if segment_param in CONFIG["segments"] else 0)
 
-    if st.button("✅ Confirm Selection"):
-        try:
-            segment_selector.handle_segment_selection(email_param, selected)
-            st.success(f"🎉 You're now subscribed to **{selected}** updates. Watch your inbox!")
-        except Exception as e:
-            st.error(f"❌ Something went wrong: {e}")
-    st.stop()
+# ----------------- UPDATE FUNCTION ----------------- #
+def update_segment(email, segment):
+    client = get_gsheet_client()
+    sheet = client.open(SHEET_NAME).worksheet(WORKSHEET_NAME)
+    all_rows = sheet.get_all_records()
+    
+    for idx, row in enumerate(all_rows):
+        if row.get("Email", "").strip().lower() == email.lower():
+            sheet.update_cell(idx + 2, 3, segment)  # Column C = Segment
+            return True
+    return False
 
-# ----------------- IF NO QUERY PARAMS ----------------- #
-st.set_page_config(page_title="Invalid Access", page_icon="🚫")
-st.title("🚫 Invalid Access")
-st.write("This page is intended for users who received a link via email.")
+
+# ----------------- UI LOGIC ----------------- #
+st.set_page_config(page_title="Tell Us What You're Interested In", layout="centered")
+st.title("🧭 Tell Us What You're Interested In")
+st.markdown("Please select your preferred segment below:")
+
+# Grab email from query param
+query_params = st.experimental_get_query_params()
+email = unquote(query_params.get("email", [""])[0])
+
+segments = [
+    "Cash Flow Solutions",
+    "Customer Financing Tools",
+    "Equipment & Franchise Funding",
+    "Healthcare & Practice Loans",
+    "SBA & Business Expansion Loans",
+    "Commercial Real Estate Loans",
+    "Unsecured Business Credit",
+    "Meet Our Founder"
+]
+
+selected_segment = st.radio("Segments", segments)
+if st.button("✅ Confirm Selection"):
+    if email:
+        success = update_segment(email, selected_segment)
+        if success:
+            st.success(f"🎉 You're now subscribed to **{selected_segment}** updates. Watch your inbox!")
+        else:
+            st.error("⚠️ Email not found in database.")
+    else:
+        st.warning("⚠️ No email detected from the URL.")
