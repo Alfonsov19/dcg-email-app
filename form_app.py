@@ -121,7 +121,12 @@ def main():
 
         # Get email from query params
         query_params = st.query_params
-        email = unquote(query_params.get("email", [""])[0]).strip()
+        raw_email = query_params.get("email", "")
+        if isinstance(raw_email, list):
+            email = unquote(raw_email[0]).strip()
+        else:
+            email = unquote(raw_email).strip()
+
 
         if not email:
             ui.display_error("Email not found in URL query string.")
