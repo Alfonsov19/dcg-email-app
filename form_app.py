@@ -11,6 +11,8 @@ import string
 from typing import Optional, List
 from segment_updater import Config as SegmentConfig, SegmentManager, SheetClient
 from send_scheduled_emails import EmailSender, EmailSequenceManager
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # -------------------- LOGGING SETUP -------------------- #
 logging.basicConfig(
