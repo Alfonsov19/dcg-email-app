@@ -1,1 +1,28 @@
+# Sensitive credentials
 credentials.json
+config.yaml
+
+# Logs
+*.log
+
+# Python bytecode/cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+
+# Environment files
+.env
+.env.*
+
+# IDE/editor-specific folders
+.vscode/
+.idea/
+
+# Streamlit cache (if applicable)
+.streamlit/
+
+# Mac/Linux/Windows system files
+.DS_Store
+Thumbs.db

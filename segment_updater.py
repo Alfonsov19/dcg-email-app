@@ -9,14 +9,11 @@ from typing import Optional
 from tenacity import retry, stop_after_attempt, wait_exponential
 import re
 
-# -------------------- LOGGING SETUP -------------------- #
+# -------------------- LOGGING -------------------- #
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler("segment_updater.log"),
-        logging.StreamHandler()
-    ]
+    handlers=[logging.FileHandler("segment_updater.log"), logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
@@ -42,6 +39,9 @@ def is_valid_email(email: str) -> bool:
 
 def is_valid_segment(segment: str) -> bool:
     return bool(segment and isinstance(segment, str) and segment.strip())
+
+def normalize(s: str) -> str:
+    return s.replace("\xa0", " ").strip().lower()
 
 # -------------------- GOOGLE SHEETS CLIENT -------------------- #
 class SheetClient:
@@ -96,7 +96,7 @@ class SheetClient:
             return
         try:
             self.sheet.update_cell(row, col, value)
-            logger.debug(f"Updated cell ({row}, {col}) with value: {value}")
+            logger.info(f"Updated cell ({row}, {col}) with value: {value}")
         except Exception as e:
             logger.error(f"Failed to update cell ({row}, {col}): {e}")
             raise
@@ -110,7 +110,7 @@ class SegmentManager:
 
     def handle_segment_selection(self, email: str, segment: str) -> bool:
         if not self.sheet_client.sheet:
-            logger.error("Google Sheets client not available.")
+            logger.error("Google Sheets client not available")
             return False
 
         if not is_valid_email(email):
@@ -121,23 +121,24 @@ class SegmentManager:
             logger.warning(f"Invalid segment: {segment}")
             return False
 
-        email = email.strip().lower()
+        email = normalize(email)
         segment = segment.strip()
 
         try:
             data = self.sheet_client.get_all_records()
-            for idx, row in enumerate(data, start=2):  # Adjust for 1-indexing + header
-                row_email = row.get("Email", "").strip().lower()
-                row_segment = row.get("Segment", "").strip()
 
-                if row_email == email and row_segment == "Pending Segment Selection":
-                    self.sheet_client.update_cell(idx, 3, segment)     # Segment
-                    self.sheet_client.update_cell(idx, 4, "")          # Last_Email_Sent
-                    self.sheet_client.update_cell(idx, 5, self.today)  # Next_Step_Date
-                    logger.info(f"✅ Segment updated for {email} to '{segment}'")
+            for idx, row in enumerate(data, start=2):  # Account for header row
+                row_email = normalize(row.get("Email", ""))
+                row_segment = normalize(row.get("Segment", ""))
+
+                if row_email == email and row_segment == "pending segment selection":
+                    self.sheet_client.update_cell(idx, 3, segment)      # Segment
+                    self.sheet_client.update_cell(idx, 4, "")           # Last_Email_Sent
+                    self.sheet_client.update_cell(idx, 5, self.today)   # Next_Step_Date
+                    logger.info(f"✔ Segment updated for {email}: {segment}")
                     return True
 
-            logger.warning(f"❌ No match found for {email} with 'Pending Segment Selection'")
+            logger.warning(f"No row matched for {email} with 'Pending Segment Selection'")
             return False
 
         except Exception as e:
