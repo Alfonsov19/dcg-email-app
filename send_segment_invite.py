@@ -1,132 +1,100 @@
-import streamlit as st
+import os
+import base64
+import logging
+from typing import List
+from urllib.parse import quote_plus
+import yaml
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-from datetime import datetime
+from email.mime.text import MIMEText
 import smtplib
-from email.message import EmailMessage
-import os
-import re
 
-# -------------------- CONFIG -------------------- #
-CONFIG = {
-    "sheet_name": "dcg_contacts",
-    "worksheet_name": "Sheet1",
-    "segments": [
-        "Cash Flow Solutions",
-        "Customer Financing Tools",
-        "Equipment & Franchise Funding",
-        "Healthcare & Practice Loans",
-        "SBA & Business Expansion Loans",
-        "Commercial Real Estate Loans",
-        "Unsecured Business Credit",
-        "Meet Our Founder"
-    ],
-    "sender_email": "dcgcapital3@gmail.com",  # ✅ Your Gmail
-    "app_password": "fykn tdfm qafy rqks",     # ✅ Your Gmail App Password
-    "base_url": "https://dcg-email-app.onrender.com"  # 🔁 Replace with your deployed URL when ready
-}
+# -------------------- LOGGING SETUP -------------------- #
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler("segment_invite.log"),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
-# -------------------- AUTH -------------------- #
-@st.cache_resource
-def get_gsheets_client():
+# -------------------- LOAD CONFIG -------------------- #
+def load_config():
+    with open("config.yaml", "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+config = load_config()
+sheet_name = config["sheets"]["name"]
+worksheet_name = config["sheets"]["worksheet"]
+segments = config["app"]["segments"]
+sender_email = config["email"]["sender_email"]
+app_password = config["email"]["app_password"]
+
+# -------------------- GOOGLE SHEETS -------------------- #
+def init_gspread_client():
+    creds_path = "credentials.json"
+    encoded = os.getenv("GOOGLE_CREDENTIALS_BASE64")
+    if not encoded:
+        raise EnvironmentError("Missing GOOGLE_CREDENTIALS_BASE64")
+    with open(creds_path, "wb") as f:
+        f.write(base64.b64decode(encoded))
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
+    client = gspread.authorize(creds)
+    return client.open(sheet_name).worksheet(worksheet_name)
+
+# -------------------- EMAIL SENDER -------------------- #
+def send_email(to: str, subject: str, html_content: str):
+    msg = MIMEText(html_content, "html")
+    msg["Subject"] = subject
+    msg["From"] = sender_email
+    msg["To"] = to
+
     try:
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds_path = os.path.abspath("credentials.json")
-        creds = ServiceAccountCredentials.from_json_keyfile_name(creds_path, scope)
-        return gspread.authorize(creds)
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(sender_email, app_password)
+            server.send_message(msg)
+        logger.info(f"✅ Sent email to {to}")
     except Exception as e:
-        st.error(f"❌ Failed to connect to Google Sheets: {e}")
-        return None
+        logger.error(f"❌ Failed to send email to {to}: {e}")
 
-# -------------------- VALIDATION -------------------- #
-def is_valid_email(email: str) -> bool:
-    pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
-    return bool(re.match(pattern, email))
+# -------------------- BUILD EMAIL HTML -------------------- #
+def build_segment_email(recipient_email: str) -> str:
+    encoded_email = quote_plus(recipient_email)
+    links = [
+        f"<li><a href='https://dcg-email-app.onrender.com/?email={encoded_email}&segment={quote_plus(segment)}'>{segment}</a></li>"
+        for segment in segments
+    ]
+    html_links = "\n".join(links)
+    return f"""
+    <html>
+        <body>
+            <p>Hi there 👋,</p>
+            <p>Please select the financial area you're most interested in:</p>
+            <ul>
+                {html_links}
+            </ul>
+            <p>Once you click, we’ll send you personalized info and guidance to match!</p>
+            <p>– The Doriscar Capital Group Team</p>
+        </body>
+    </html>
+    """
 
-# -------------------- EMAIL FUNCTION -------------------- #
-def send_segment_invite(name, email):
-    try:
-        segment_links = "\n".join([
-            f"💸 Cash Flow Solutions: {CONFIG['base_url']}?email={email}&segment=Cash+Flow+Solutions",
-            f"🧾 Customer Financing Tools: {CONFIG['base_url']}?email={email}&segment=Customer+Financing+Tools",
-            f"🛠️ Equipment & Franchise Funding: {CONFIG['base_url']}?email={email}&segment=Equipment+Franchise+Funding",
-            f"🩺 Healthcare & Practice Loans: {CONFIG['base_url']}?email={email}&segment=Healthcare+Practice+Loans",
-            f"🚀 SBA & Business Expansion Loans: {CONFIG['base_url']}?email={email}&segment=SBA+Business+Expansion+Loans",
-            f"🏢 Commercial Real Estate Loans: {CONFIG['base_url']}?email={email}&segment=Commercial+Real+Estate+Loans",
-            f"💳 Unsecured Business Credit: {CONFIG['base_url']}?email={email}&segment=Unsecured+Business+Credit",
-            f"👨‍⚕️ Meet Our Founder: {CONFIG['base_url']}?email={email}&segment=Meet+Our+Founder"
-        ])
-
-        body = f"""Hi {name},
-
-Thanks for connecting with Doriscar Capital Group!
-
-We help entrepreneurs and business owners access the capital they need to grow — from working capital and equipment financing to SBA loans and real estate funding.
-
-Let us know what you're most interested in. Just click one:
-
-{segment_links}
-
-Once you click, we’ll personalize everything we send you moving forward.
-
-Cheers,  
-Doriscar Capital Group
-"""
-
-        msg = EmailMessage()
-        msg.set_content(body)
-        msg['Subject'] = "🚀 Welcome! Choose What You Want to Learn About"
-        msg['From'] = CONFIG['sender_email']
-        msg['To'] = email
-
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-            smtp.login(CONFIG['sender_email'], CONFIG['app_password'])
-            smtp.send_message(msg)
-
-        return True
-    except Exception as e:
-        st.error(f"❌ Failed to send welcome email: {e}")
-        return False
-
-# -------------------- STREAMLIT APP -------------------- #
+# -------------------- MAIN FUNCTION -------------------- #
 def main():
-    st.set_page_config(page_title="Send Welcome Email", page_icon="📧")
-    st.title("📧 Send Welcome Email with Segment Options")
+    sheet = init_gspread_client()
+    data = sheet.get_all_records()
 
-    with st.form("segment_invite_form"):
-        name = st.text_input("Recipient's Name")
-        email = st.text_input("Recipient's Email")
-        submit = st.form_submit_button("Send Email + Save")
+    for idx, row in enumerate(data, start=2):
+        email = row.get("Email", "").strip()
+        segment = row.get("Segment", "").strip().lower()
 
-    if submit:
-        if not name.strip():
-            st.error("Please enter a name.")
-            return
-        if not is_valid_email(email):
-            st.error("Please enter a valid email.")
-            return
-
-        sent = send_segment_invite(name.strip(), email.strip())
-
-        if sent:
-            client = get_gsheets_client()
-            if client:
-                try:
-                    sheet = client.open(CONFIG["sheet_name"]).worksheet(CONFIG["worksheet_name"])
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    sheet.append_row([
-                        name.strip(),
-                        email.strip().lower(),
-                        "Pending Segment Selection",  # Will be updated when link is clicked
-                        "", "",  # Last_Email_Sent, Next_Step_Date
-                        timestamp,
-                        ""       # Notes
-                    ])
-                    st.success("✅ Email sent and data saved to Google Sheets.")
-                except Exception as e:
-                    st.error(f"❌ Failed to save to Google Sheets: {e}")
-            else:
-                st.error("❌ Could not connect to Google Sheets.")
+        if segment == "pending segment selection":
+            logger.info(f"📨 Sending invite to: {email}")
+            html = build_segment_email(email)
+            send_email(email, "Welcome to Doriscar Capital – Choose Your Path", html)
 
 if __name__ == "__main__":
     main()
