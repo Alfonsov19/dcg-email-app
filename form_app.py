@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import unquote
 import logging
 import yaml
@@ -71,6 +71,7 @@ class SegmentHandler:
         self.segment_manager = SegmentManager(segment_config)
         self.email_sender = EmailSender(segment_config)
         self.sequence_manager = EmailSequenceManager(segment_config)
+        self.sheet = self.segment_manager.sheet  # reuse the sheet for updating
 
     def update_segment_and_send_email(self, email: str, segment: str) -> bool:
         try:
@@ -86,7 +87,6 @@ class SegmentHandler:
             if not success:
                 return False
 
-            # Load and validate sequence
             sequence = self.sequence_manager.load_sequence(segment)
             if not sequence or not isinstance(sequence, list):
                 logger.warning(f"Missing or invalid email sequence for segment: {segment}")
@@ -103,7 +103,19 @@ class SegmentHandler:
             # Send Week 1 email
             subject = first_email["subject"]
             body = first_email["body"].replace("{name}", name if name else "there")
-            self.email_sender.send_email(subject, body, email)
+            email_sent = self.email_sender.send_email(subject, body, email)
+
+            if not email_sent:
+                return False
+
+            # ✅ Update Google Sheet with Week 1 and next step date
+            records = self.sheet.get_all_records()
+            for idx, row in enumerate(records):
+                if row["Email"].strip().lower() == email.lower():
+                    row_index = idx + 2
+                    self.sheet.update_cell(row_index, 4, "Week 1")  # Last_Email_Sent
+                    self.sheet.update_cell(row_index, 5, (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"))  # Next_Step_Date
+                    break
 
             return True
 
@@ -126,7 +138,6 @@ def main():
             email = unquote(raw_email[0]).strip()
         else:
             email = unquote(raw_email).strip()
-
 
         if not email:
             ui.display_error("Email not found in URL query string.")
