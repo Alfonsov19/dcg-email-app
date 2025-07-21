@@ -9,7 +9,7 @@ import re
 import string
 
 from typing import Optional, List
-from segment_updater import Config as SegmentConfig, SegmentManager
+from segment_updater import Config as SegmentConfig, SegmentManager, SheetClient
 from send_scheduled_emails import EmailSender, EmailSequenceManager
 
 # -------------------- LOGGING SETUP -------------------- #
@@ -71,7 +71,7 @@ class SegmentHandler:
         self.segment_manager = SegmentManager(segment_config)
         self.email_sender = EmailSender(segment_config)
         self.sequence_manager = EmailSequenceManager(segment_config)
-        self.sheet = self.segment_manager.sheet  # reuse the sheet for updating
+        self.sheet = SheetClient(segment_config).sheet  # ✅ Fixed to use config.yaml-based sheet
 
     def update_segment_and_send_email(self, email: str, segment: str) -> bool:
         try:
