@@ -1,9 +1,22 @@
+app:
+  page_title: "Tell Us What You're Interested In"
+  segments:
+    - Cash Flow Solutions
+    - Customer Financing Tools
+    - Equipment & Franchise Funding
+    - Healthcare & Practice Loans
+    - SBA & Business Expansion Loans
+    - Commercial Real Estate Loans
+    - Unsecured Business Credit
+    - Meet Our Founder
+
 email:
   sender_email: "dcgcapital3@gmail.com"
   app_password: "fykn tdfm qafy rqks"
   sequence_folder: "email_sequences"
   retry_attempts: 3
   retry_delay: 5
+
 sheets:
   name: "dcg_contacts"
   worksheet: "Sheet1"
