@@ -23,3 +23,8 @@ This is a Python-based email collection and segmentation tool built for Doriscar
 
 ```bash
 streamlit run form_app.py
+
+# Setup instructions
+cp config.template.yaml config.yaml
+# then fill in your real values
+

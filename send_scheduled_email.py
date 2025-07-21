@@ -229,3 +229,44 @@ class CampaignManager:
             next_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
             self.sheet_client.update_cell(idx + 2, 5, next_date)
 
+# -------------------- MANUAL TRIGGER: send_segment_email() -------------------- #
+def send_segment_email(email: str, segment: str) -> bool:
+    """
+    Sends the first email in the selected segment sequence and updates sheet tracking.
+    """
+    try:
+        config = Config()
+        sheet_client = SheetClient(config)
+        email_sender = EmailSender(config)
+        sequence_manager = EmailSequenceManager(config)
+
+        # Get the contact row
+        records = sheet_client.get_all_records()
+        for idx, row in enumerate(records):
+            if row["Email"].strip().lower() == email.strip().lower():
+                name = row.get("Name", "there")
+                break
+        else:
+            logger.warning(f"Email {email} not found in sheet during segment email send.")
+            return False
+
+        sequence = sequence_manager.load_sequence(segment)
+        if not sequence:
+            logger.warning(f"No sequence found for segment {segment}")
+            return False
+
+        first_email = sequence[0]
+        subject = first_email["subject"]
+        body = first_email["body"].replace("{name}", name)
+
+        if email_sender.send_email(subject, body, email):
+            row_index = idx + 2
+            sheet_client.update_cell(row_index, 4, "Week 1")
+            next_date = (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d")
+            sheet_client.update_cell(row_index, 5, next_date)
+            logger.info(f"Segment email successfully sent and logged for {email}")
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Failed in send_segment_email for {email}: {e}")
+        return False

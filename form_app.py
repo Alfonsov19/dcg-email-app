@@ -42,7 +42,6 @@ def is_valid_email(email: str) -> bool:
     return bool(re.match(pattern, email))
 
 def smart_capitalize(s: str) -> str:
-    """Capitalize first letters and remove symbols for a cleaner display name."""
     return string.capwords(s.replace(".", " ").replace("_", " ")).replace(" ", "")
 
 # -------------------- UI MANAGER -------------------- #
@@ -71,7 +70,7 @@ class SegmentHandler:
         self.segment_manager = SegmentManager(segment_config)
         self.email_sender = EmailSender(segment_config)
         self.sequence_manager = EmailSequenceManager(segment_config)
-        self.sheet = SheetClient(segment_config).sheet  # ✅ Fixed to use config.yaml-based sheet
+        self.sheet = SheetClient(segment_config).sheet
 
     def update_segment_and_send_email(self, email: str, segment: str) -> bool:
         try:
@@ -97,24 +96,25 @@ class SegmentHandler:
                 logger.warning(f"Invalid structure in first email of sequence for segment: {segment}")
                 return False
 
-            # Extract first name
+            # Extract name from email
             name = smart_capitalize(email.split("@")[0])
 
             # Send Week 1 email
             subject = first_email["subject"]
-            body = first_email["body"].replace("{name}", name if name else "there")
+            body = first_email["body"].replace("{name}", name or "there")
             email_sent = self.email_sender.send_email(subject, body, email)
 
             if not email_sent:
+                logger.error(f"Email sending failed for: {email}")
                 return False
 
-            # ✅ Update Google Sheet with Week 1 and next step date
+            # Update Google Sheet: Last_Email_Sent and Next_Step_Date
             records = self.sheet.get_all_records()
             for idx, row in enumerate(records):
-                if row["Email"].strip().lower() == email.lower():
+                if row.get("Email", "").strip().lower() == email.lower():
                     row_index = idx + 2
-                    self.sheet.update_cell(row_index, 4, "Week 1")  # Last_Email_Sent
-                    self.sheet.update_cell(row_index, 5, (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"))  # Next_Step_Date
+                    self.sheet.update_cell(row_index, 4, "Week 1")
+                    self.sheet.update_cell(row_index, 5, (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%d"))
                     break
 
             return True
@@ -133,11 +133,7 @@ def main():
 
         # Get email from query params
         query_params = st.query_params
-        raw_email = query_params.get("email", "")
-        if isinstance(raw_email, list):
-            email = unquote(raw_email[0]).strip()
-        else:
-            email = unquote(raw_email).strip()
+        email = unquote(query_params.get("email", [""])[0]).strip()
 
         if not email:
             ui.display_error("Email not found in URL query string.")
@@ -147,19 +143,12 @@ def main():
             ui.display_error("Invalid email format in URL.")
             st.stop()
 
-        # UI dropdown
-        selected_segment = st.radio("Select your interest:", app_config.segments, key="segment_radio")
+        selected_segment = st.radio("Select your interest:", app_config.segments)
 
-        if st.button("✅ Confirm Selection", key="confirm_button"):
+        if st.button("✅ Confirm Selection"):
             success = handler.update_segment_and_send_email(email, selected_segment)
             if success:
                 ui.display_success(f"You're now subscribed to **{selected_segment}** updates. Watch your inbox!")
-
-                # Optional: redirect to booking page
-                # import time
-                # time.sleep(3)
-                # st.switch_page("https://calendly.com/dcgcapital3/30min")
-
             else:
                 ui.display_error("No matching email with 'Pending Segment Selection' found in the sheet.")
 
