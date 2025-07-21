@@ -1,0 +1,9 @@
+email:
+  sender_email: "dcgcapital3@gmail.com"
+  app_password: "fykn tdfm qafy rqks"
+  sequence_folder: "email_sequences"
+  retry_attempts: 3
+  retry_delay: 5
+sheets:
+  name: "dcg_contacts"
+  worksheet: "Sheet1"
