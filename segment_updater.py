@@ -24,10 +24,15 @@ class Config:
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 cfg = yaml.safe_load(f)
+
             self.sheet_name = cfg["sheets"]["name"]
             self.worksheet_name = cfg["sheets"]["worksheet"]
             self.retry_attempts = cfg.get("sheets", {}).get("retry_attempts", 3)
             self.retry_delay = cfg.get("sheets", {}).get("retry_delay", 5)
+
+            self.sender_email = cfg["email"]["sender_email"]
+            self.app_password = cfg["email"]["app_password"]
+            self.email_sequence_folder = cfg["email"]["sequence_folder"]  # ← ADDED THIS
         except Exception as e:
             logger.error(f"Failed to load configuration: {e}")
             raise
@@ -131,7 +136,8 @@ class SegmentManager:
                 row_email = normalize(row.get("Email", ""))
                 row_segment = normalize(row.get("Segment", ""))
 
-                if row_email == email and row_segment == "pending segment selection":
+                # ✅ FIX: normalize "pending segment selection" before comparing
+                if row_email == email and row_segment == normalize("pending segment selection"):
                     self.sheet_client.update_cell(idx, 3, segment)      # Segment
                     self.sheet_client.update_cell(idx, 4, "")           # Last_Email_Sent
                     self.sheet_client.update_cell(idx, 5, self.today)   # Next_Step_Date
